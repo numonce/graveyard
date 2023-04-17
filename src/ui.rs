@@ -5,49 +5,138 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use ratatui::style::Color;
 use ratatui::{
     backend::CrosstermBackend,
-    widgets::{Block, Borders},
+    style::Style,
+    widgets::{Block, Borders, List, ListItem, ListState},
     Terminal,
 };
-use std::io;
+use std::io::{self, Stdout};
 
-pub fn start_ui() -> Result<(), io::Error> {
+pub fn start_ui() -> Result<(), Box<dyn std::error::Error>> {
     //setup the keystrokes.
-    let ctrl_c = KeyCode::Char('c');
-    let cquit = KeyEvent::new(ctrl_c, KeyModifiers::CONTROL);
-    let q = KeyCode::Char('q');
-    let quit = KeyEvent::new(q, KeyModifiers::NONE);
-
+    let cquit = Event::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
+    let quit = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
+    let up = Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    let down = Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnableMouseCapture, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-
+    let mut events = Events::new(vec!());
     // Draw the terminal and handle user input.
     loop {
+        let items: Vec<ListItem> = events
+            .items
+            .iter()
+            .map(|i| ListItem::new(i.as_ref()))
+            .collect();
+        //parse the items in list.
+        //Create the stylized list.
+        let item_list = List::new(items)
+            .block(Block::default().title("Beacons").borders(Borders::ALL))
+            .style(Style::default().fg(Color::Cyan))
+            .highlight_style(Style::default().bg(Color::White))
+            .highlight_symbol(">>");
+        //Render the box and list.
         terminal.draw(|f| {
             let size = f.size();
-            let block = Block::default().title("Block").borders(Borders::ALL);
-            f.render_widget(block, size);
+            f.render_stateful_widget(item_list, size, &mut events.state);
         })?;
+        //Handle user input.
         if crossterm::event::poll(std::time::Duration::from_millis(100))? {
             let keystroke = read()?;
-            if keystroke == Event::Key(quit) || keystroke == Event::Key(cquit) {
+            if keystroke == cquit || keystroke == quit {
+                gracefully_exit(terminal)?;
                 break;
+            } else if keystroke == up {
+                events.previous();
+            } else if keystroke == down {
+                events.next();
             }
         }
+        events.items.push(String::from("1"));
     }
+    Ok(())
+}
+
+pub fn gracefully_exit(
+    //
+    mut terminal: Terminal<CrosstermBackend<Stdout>>,
+) -> Result<(), Box<dyn std::error::Error>> {
     // restore terminal
     disable_raw_mode()?;
     execute!(
         terminal.backend_mut(),
+        DisableMouseCapture,
         LeaveAlternateScreen,
-        DisableMouseCapture
     )?;
     terminal.show_cursor()?;
 
     Ok(())
+}
+struct Events {
+    // `items` is the state managed by your application.
+    items: Vec<String>,
+    // `state` is the state that can be modified by the UI. It stores the index of the selected
+    // item as well as the offset computed during the previous draw call (used to implement
+    // natural scrolling).
+    state: ListState,
+}
+
+impl Events {
+    fn new(items: Vec<String>) -> Events {
+        Events {
+            items,
+            state: ListState::default(),
+        }
+    }
+
+    pub fn set_items(&mut self, items: Vec<String>) {
+        self.items = items;
+        // We reset the state as the associated items have changed. This effectively reset
+        // the selection as well as the stored offset.
+        self.state = ListState::default();
+    }
+
+    // Select the next item. This will not be reflected until the widget is drawn in the
+    // `Terminal::draw` callback using `Frame::render_stateful_widget`.
+    pub fn next(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i >= self.items.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+
+    // Select the previous item. This will not be reflected until the widget is drawn in the
+    // `Terminal::draw` callback using `Frame::render_stateful_widget`.
+    pub fn previous(&mut self) {
+        let i = match self.state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.items.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.state.select(Some(i));
+    }
+
+    // Unselect the currently selected item if any. The implementation of `ListState` makes
+    // sure that the stored offset is also reset.
+    pub fn unselect(&mut self) {
+        self.state.select(None);
+    }
 }
