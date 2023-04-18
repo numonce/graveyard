@@ -13,8 +13,11 @@ use ratatui::{
     Terminal,
 };
 use std::io::{self, Stdout};
-
-pub fn start_ui() -> Result<(), Box<dyn std::error::Error>> {
+use std::sync::mpsc::{Receiver, Sender};
+pub fn start_ui(
+    tx: Sender<String>,
+    rx: Receiver<String>,
+) -> Result<(), Box<dyn std::error::Error>> {
     //setup the keystrokes.
     let cquit = Event::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
     let quit = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
@@ -26,7 +29,7 @@ pub fn start_ui() -> Result<(), Box<dyn std::error::Error>> {
     execute!(stdout, EnableMouseCapture, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-    let mut events = Events::new(vec!());
+    let mut events = Events::new(vec![String::from("Item 1"), String::from("Item 2")]);
     // Draw the terminal and handle user input.
     loop {
         let items: Vec<ListItem> = events
@@ -39,7 +42,7 @@ pub fn start_ui() -> Result<(), Box<dyn std::error::Error>> {
         let item_list = List::new(items)
             .block(Block::default().title("Beacons").borders(Borders::ALL))
             .style(Style::default().fg(Color::Cyan))
-            .highlight_style(Style::default().bg(Color::White))
+            .highlight_style(Style::default().bg(Color::Magenta))
             .highlight_symbol(">>");
         //Render the box and list.
         terminal.draw(|f| {
@@ -51,6 +54,7 @@ pub fn start_ui() -> Result<(), Box<dyn std::error::Error>> {
             let keystroke = read()?;
             if keystroke == cquit || keystroke == quit {
                 gracefully_exit(terminal)?;
+                tx.send(String::from("Kill yourself."))?;
                 break;
             } else if keystroke == up {
                 events.previous();
@@ -58,7 +62,10 @@ pub fn start_ui() -> Result<(), Box<dyn std::error::Error>> {
                 events.next();
             }
         }
-        events.items.push(String::from("1"));
+        match rx.try_recv() {
+            Ok(msg) => events.items.push(msg),
+            Err(_) => continue,
+        };
     }
     Ok(())
 }
