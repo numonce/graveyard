@@ -29,7 +29,7 @@ pub fn start_ui(
     execute!(stdout, EnableMouseCapture, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-    let mut events = Events::new(vec![String::from("Item 1"), String::from("Item 2")]);
+    let mut events = Events::new(Vec::new());
     // Draw the terminal and handle user input.
     loop {
         let items: Vec<ListItem> = events
@@ -53,8 +53,8 @@ pub fn start_ui(
         if crossterm::event::poll(std::time::Duration::from_millis(100))? {
             let keystroke = read()?;
             if keystroke == cquit || keystroke == quit {
-                gracefully_exit(terminal)?;
                 tx.send(String::from("Kill yourself."))?;
+                gracefully_exit(terminal)?;
                 break;
             } else if keystroke == up {
                 events.previous();
@@ -102,13 +102,6 @@ impl Events {
         }
     }
 
-    pub fn set_items(&mut self, items: Vec<String>) {
-        self.items = items;
-        // We reset the state as the associated items have changed. This effectively reset
-        // the selection as well as the stored offset.
-        self.state = ListState::default();
-    }
-
     // Select the next item. This will not be reflected until the widget is drawn in the
     // `Terminal::draw` callback using `Frame::render_stateful_widget`.
     pub fn next(&mut self) {
@@ -141,9 +134,4 @@ impl Events {
         self.state.select(Some(i));
     }
 
-    // Unselect the currently selected item if any. The implementation of `ListState` makes
-    // sure that the stored offset is also reset.
-    pub fn unselect(&mut self) {
-        self.state.select(None);
-    }
 }
