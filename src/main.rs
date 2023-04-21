@@ -1,7 +1,8 @@
 mod server;
 mod ui;
-use std::sync::mpsc;
 use std::thread::spawn;
+use std::sync::mpsc;
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tx1, rx1) = mpsc::channel();
     let (tx2, rx2) = mpsc::channel();

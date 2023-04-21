@@ -14,6 +14,7 @@ use ratatui::{
 };
 use std::io::{self, Stdout};
 use std::sync::mpsc::{Receiver, Sender};
+
 pub fn start_ui(
     tx: Sender<String>,
     rx: Receiver<String>,
@@ -63,7 +64,15 @@ pub fn start_ui(
             }
         }
         match rx.try_recv() {
-            Ok(msg) => events.items.push(msg),
+            Ok(msg) => {
+                let slice = msg.split(" ").collect::<Vec<_>>();
+                match slice[0] {
+                    "add" => events.items.push(slice[1].to_string()),
+                    _ => events
+                        .items
+                        .retain(|x| x.to_owned() != slice[1].to_string()),
+                }
+            }
             Err(_) => continue,
         };
     }
@@ -133,5 +142,4 @@ impl Events {
         };
         self.state.select(Some(i));
     }
-
 }

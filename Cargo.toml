@@ -9,4 +9,5 @@ edition = "2021"
 clap = "4.0.29"
 crossterm = "0.25.0"
 ratatui = "0.20.1"
+serde = "1.0.160"
 tokio = { version = "1.22.0", features = ["full"] }
