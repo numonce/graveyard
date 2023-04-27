@@ -8,6 +8,8 @@ edition = "2021"
 [dependencies]
 clap = "4.0.29"
 crossterm = "0.25.0"
+flume = "0.10.14"
 ratatui = "0.20.1"
+s2n-quic = "1.19.0"
 serde = "1.0.160"
 tokio = { version = "1.22.0", features = ["full"] }

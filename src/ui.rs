@@ -12,8 +12,8 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState},
     Terminal,
 };
+use flume::{Sender,Receiver};
 use std::io::{self, Stdout};
-use std::sync::mpsc::{Receiver, Sender};
 
 pub fn start_ui(
     tx: Sender<String>,
@@ -75,6 +75,7 @@ pub fn start_ui(
             }
             Err(_) => continue,
         };
+
     }
     Ok(())
 }
