@@ -5,6 +5,7 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use flume::{Receiver, Sender};
 use ratatui::style::Color;
 use ratatui::{
     backend::CrosstermBackend,
@@ -12,8 +13,6 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState},
     Terminal,
 };
-use flume::{Sender,Receiver};
-use std::io::{self, Stdout};
 
 pub fn start_ui(
     tx: Sender<String>,
@@ -24,9 +23,10 @@ pub fn start_ui(
     let quit = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
     let up = Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
     let down = Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+
     // setup terminal
     enable_raw_mode()?;
-    let mut stdout = io::stdout();
+    let mut stdout = std::io::stdout();
     execute!(stdout, EnableMouseCapture, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -42,8 +42,8 @@ pub fn start_ui(
         //Create the stylized list.
         let item_list = List::new(items)
             .block(Block::default().title("Beacons").borders(Borders::ALL))
-            .style(Style::default().fg(Color::Cyan))
-            .highlight_style(Style::default().bg(Color::Magenta))
+            .style(Style::default().fg(Color::Green))
+            .highlight_style(Style::default().bg(Color::DarkGray))
             .highlight_symbol(">>");
         //Render the box and list.
         terminal.draw(|f| {
@@ -55,6 +55,7 @@ pub fn start_ui(
             let keystroke = read()?;
             if keystroke == cquit || keystroke == quit {
                 tx.send(String::from("Kill yourself."))?;
+                std::thread::sleep(std::time::Duration::from_millis(100));
                 gracefully_exit(terminal)?;
                 break;
             } else if keystroke == up {
@@ -75,14 +76,13 @@ pub fn start_ui(
             }
             Err(_) => continue,
         };
-
     }
     Ok(())
 }
 
 pub fn gracefully_exit(
     //
-    mut terminal: Terminal<CrosstermBackend<Stdout>>,
+    mut terminal: Terminal<CrosstermBackend<std::io::Stdout>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // restore terminal
     disable_raw_mode()?;
@@ -144,3 +144,10 @@ impl Events {
         self.state.select(Some(i));
     }
 }
+
+//fn select_thing(mut terminal: Terminal<CrosstermBackend<Stdout>>) -> Result<(),Box<dyn Error>>{
+//execute!(EnterAlternateScreen)?;
+//std::thread::sleep(std::time::Duration::from_secs(5));
+//execute!(LeaveAlternateScreen)?;
+//Ok(())
+//}
