@@ -8,7 +8,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (tcptx, tcprx) = unbounded();
     let quictx = tcptx.clone();
     let quicrx = uirx.clone();
-    let ui_handle = tokio::spawn( async move {
+    let ui_handle = tokio::spawn(async move {
         ui::start_ui(uitx, tcprx).unwrap();
     });
     let tcp_server_handle = tokio::spawn(async move {
@@ -22,5 +22,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ui_handle.await?;
     Ok(())
 }
-
-

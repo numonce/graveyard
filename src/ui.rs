@@ -1,4 +1,3 @@
-use serde::{Serialize,Deserialize};
 use crossterm::{
     event::{
         read, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers,
@@ -10,8 +9,8 @@ use flume::{Receiver, Sender};
 use ratatui::{
     backend::CrosstermBackend,
     style::Style,
-    widgets::{Block, Borders, List, ListItem, ListState, BarChart},
-    Terminal,
+    widgets::{BarChart, Block, Borders, List, ListItem, ListState},
+    Terminal, layout::Alignment,
 };
 use ratatui::{
     layout::{Constraint::Percentage, Direction, Layout},
@@ -19,6 +18,7 @@ use ratatui::{
     text::{Span, Spans},
     widgets::{Paragraph, Wrap},
 };
+use serde::{Deserialize, Serialize};
 pub fn start_ui(
     tx: Sender<String>,
     rx: Receiver<String>,
@@ -27,7 +27,9 @@ pub fn start_ui(
     let cquit = Event::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL));
     let quit = Event::Key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE));
     let up = Event::Key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE));
+    let kup = Event::Key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE));
     let down = Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    let jdown = Event::Key(KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE));
     let enter = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
     // setup terminal
     enable_raw_mode()?;
@@ -75,15 +77,23 @@ pub fn start_ui(
             .wrap(Wrap { trim: true });
         //Create graph. Currently a place holder.
         let barchart = BarChart::default()
-    .block(Block::default().title("jitter")
-           .title_alignment(ratatui::layout::Alignment::Center).borders(Borders::ALL))
-    .bar_width(3)
-    .bar_gap(1)
-    .bar_style(Style::default().fg(Color::Yellow).bg(Color::Red))
-    .value_style(Style::default().fg(Color::Red).add_modifier(ratatui::style::Modifier::BOLD))
-    .label_style(Style::default().fg(Color::White))
-    .data(&[("B0", 5), ("B1", 2), ("B2", 4), ("B3", 3)])
-    .max(4);
+            .block(
+                Block::default()
+                    .title("jitter")
+                    .title_alignment(ratatui::layout::Alignment::Center)
+                    .borders(Borders::ALL),
+            )
+            .bar_width(3)
+            .bar_gap(1)
+            .bar_style(Style::default().fg(Color::Yellow).bg(Color::Red))
+            .value_style(
+                Style::default()
+                    .fg(Color::Red)
+                    .add_modifier(ratatui::style::Modifier::BOLD),
+            )
+            .label_style(Style::default().fg(Color::White))
+            .data(&[("B0", 5), ("B1", 2), ("B2", 4), ("B3", 3)])
+            .max(4);
 
         //Render the box and list.
         terminal.draw(|f| {
@@ -91,6 +101,7 @@ pub fn start_ui(
             f.render_widget(instructions_box, vchunks[0]);
             f.render_widget(barchart, vchunks[1]);
         })?;
+
         //Handle user input.
         if crossterm::event::poll(std::time::Duration::from_millis(100))? {
             let keystroke = read()?;
@@ -99,13 +110,14 @@ pub fn start_ui(
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 gracefully_exit(terminal)?;
                 break;
-            } else if keystroke == up {
+            } else if keystroke == up || keystroke == kup {
                 beacons.previous();
-            } else if keystroke == down {
+            } else if keystroke == down || keystroke == jdown {
                 beacons.next();
-           }else if keystroke == enter {
-               context_menu(&mut terminal)?;
-           }
+            } else if keystroke == enter {
+                let index = beacons.state.selected().unwrap();
+                context_menu(beacons.items[index].clone(), &mut terminal)?;
+            }
         }
         match rx.try_recv() {
             Ok(msg) => {
@@ -115,21 +127,19 @@ pub fn start_ui(
                         let zombie: Zombie = serde_json::from_str(slice[1])?;
                         beacons.items.push(zombie);
                     }
-                    _ =>{
+                    _ => {
                         let zombie: Zombie = serde_json::from_str(slice[1])?;
                         let z_index = beacons.items.iter().position(|x| *x == zombie).unwrap();
-                        beacons
-                        .items
-                        .remove(z_index);
-                }
+                        beacons.items.remove(z_index);
+                    }
                 }
             }
             Err(_) => continue,
         };
     }
     Ok(())
+}
 
-    }
 pub fn gracefully_exit(
     //
     mut terminal: Terminal<CrosstermBackend<std::io::Stdout>>,
@@ -145,6 +155,7 @@ pub fn gracefully_exit(
 
     Ok(())
 }
+
 struct Beacons {
     // `items` is the state managed by your application.
     items: Vec<Zombie>,
@@ -164,6 +175,7 @@ impl Beacons {
 
     // Select the next item. This will not be reflected until the widget is drawn in the
     // `Terminal::draw` callback using `Frame::render_stateful_widget`.
+
     pub fn next(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
@@ -195,30 +207,39 @@ impl Beacons {
     }
 }
 
-fn context_menu(terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>) -> Result<(),Box<dyn std::error::Error>>{
-        let instructions = Spans::from(vec![Span::styled(
-            "This is a stand in for the general instructions on how to make use of this application.",
-            Style::default().fg(Color::Green),
-        )]);
-        let instructions_box = Paragraph::new(instructions)
-            .block(
-                Block::default()
-            )
-            .alignment(ratatui::layout::Alignment::Center)
-            .wrap(Wrap { trim: true });
-        let chunks = Layout::default().direction(Direction::Horizontal).constraints([Percentage(80), Percentage(20)]).split(terminal.size()?);
+fn context_menu(
+    current_beacon: Zombie,
+    terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut details = Vec::new();
+    let dirty = serde_json::to_string(&current_beacon)?;
+    let badchars: &[_] = &['{', '}'];
+    for i in dirty.split(",") {
+        let clean = i.trim_matches(badchars);
+        let d = Spans::from(clean);
+        details.push(d);
+    }
+    let instructions = details;
+    let instructions_box = Paragraph::new(instructions)
+        .block(Block::default()
+               .borders(Borders::ALL)
+               .title("details")
+               .title_alignment(Alignment::Center))
+        .alignment(ratatui::layout::Alignment::Left);
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Percentage(50), Percentage(50)])
+        .split(terminal.size()?);
     terminal.draw(|f| {
-        f.render_widget(instructions_box,chunks[0]);
+        f.render_widget(instructions_box, chunks[1]);
     })?;
-        std::thread::sleep(std::time::Duration::from_secs(5));
-Ok(())
+    std::thread::sleep(std::time::Duration::from_secs(5));
+    Ok(())
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone,PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 struct Zombie {
     ip: String,
     os: String,
     user: String,
 }
-
-
